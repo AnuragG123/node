@@ -20,3 +20,50 @@ Production Pm2
 -----------
 Nginx
 Docker
+
+///
+Node Inbuilt
+> Static api with fs 
+
+package.json
+/////////
+Step to create package.json
+//////////////
+**NodeJs must be installed
+
+> Navigate to thr folder where you want to generate
+   USING  CMD/Terminal
+> npm init
+> answer all questions
+> type "yes"
+
+
+Local Dependency 
+>
+
+
+Global Dependency>> 
+> Only at time development
+> create the app first app
+> Need admin access to install
+
+
+/////////
+Install Local Dependency
+//////////////
+> Navigate to thr folder where you want to install
+package 
+> npm install packagename/ npm i packagename
+
+
+/////////
+Install Global Dependency
+//////////////
+#Win
+> Open cmd as admin 
+> npm i -g nodemon
+
+
+#mac/linux
+>Open Terminal
+>sudo npm i -g nodemon
