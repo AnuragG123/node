@@ -22,8 +22,8 @@ Nginx
 Docker
 
 ///
-Node Inbuilt
-> Static api with fs 
+expressRouter
+static Data
 
 package.json
 /////////
@@ -67,3 +67,10 @@ Install Global Dependency
 #mac/linux
 >Open Terminal
 >sudo npm i -g nodemon
+
+/////CD//////
+npm i -g nodemon
+
+
+echo 'export PORT='9900'>dev.env
+source ./dev.env
