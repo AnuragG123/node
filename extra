@@ -74,3 +74,9 @@ npm i -g nodemon
 
 echo 'export PORT='9900'>dev.env
 source ./dev.env
+
+EJS
+PUG
+Swig
+HandleBar
+Vash
