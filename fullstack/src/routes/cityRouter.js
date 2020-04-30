@@ -1,64 +1,37 @@
 var express = require('express');
 var cityRouter = express.Router();
+var mongodb = require('mongodb').MongoClient;
+var url="mongodb://127.0.0.1:27017";
 
-var city = [
-    {
-		"id": 1,
-		"name": "Delhi",
-		"country_id": 1,
-		"country_name": "India",
-		"country_flag_url": "https://b.zmtcdn.com/images/countries/flags/country_1.png",
-	},
-    {
-		"id": 3,
-		"name": "Mumbai",
-		"country_id": 1,
-		"country_name": "India",
-		"country_flag_url": "https://b.zmtcdn.com/images/countries/flags/country_1.png",
+
+function router(menu){
+	cityRouter.route('/')
+		.get( function(req,res){
+		//res.status(200).send(city)
+		mongodb.connect(url,function(err,dc){
+            if(err){
+                res.status(501).send("Error While Connecting")
+            }else{
+                const dbo = dc.db('nareshit');
+                dbo.collection('city').find({}).toArray((err,data) => {
+                    if(err){
+                        res.status(501).send("Error While Feetching")
+                    }else{
+                        res.render('city',{title:'City List',cities:data,menu:menu})
+                    }
+                })
+            }
+        })
 		
-    },
-    {
-		"id": 280,
-		"name": "New York City, NY",
-		"country_id": 216,
-		"country_name": "United States",
-		"country_flag_url": "https://b.zmtcdn.com/images/countries/flags/country_216.png",
-		
-    },
-    {
-        "id": 32,
-		"name": "Pune",
-		"country_id": 1,
-		"country_name": "India",
-		"country_flag_url": "https://b.zmtcdn.com/images/countries/flags/country_1.png",
-	        
-	},
-	{
-		"id": 77,
-		"name": "Chandigrah",
-		"country_id": 1,
-		"country_name": "India",
-		"country_flag_url": "https://b.zmtcdn.com/images/countries/flags/country_1.png",
-	
-	},
-    {
-		"id": 4,
-		"name": "Bangalore",
-		"country_id": 1,
-		"country_name": "India",
-		"country_flag_url": "https://b.zmtcdn.com/images/countries/flags/country_1.png",
-    }
-]
+	})
 
-cityRouter.route('/')
-    .get( function(req,res){
-    //res.status(200).send(city)
-    res.render('city',{title:'City List',cities:city})
-})
+	cityRouter.route('/details')
+		.get( function(req,res){
+		res.status(200).send("City  details")
+	});
 
-cityRouter.route('/details')
-    .get( function(req,res){
-    res.status(200).send("City  details")
-});
+	return cityRouter
+}
 
-module.exports = cityRouter
+
+module.exports = router;

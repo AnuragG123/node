@@ -80,3 +80,137 @@ PUG
 Swig
 HandleBar
 Vash
+
+
+
+function add(a,b){
+   return a+b
+}
+
+
+add(1,2)
+
+SQl        NoSql
+Database   Database
+Table      Collections
+Row        Document
+
+sno english  hindi
+1              80
+2     80
+3              80
+
+
+[
+   {
+      sno:1,
+      english:80
+   },
+    {
+      sno:2,
+      hindi:80
+   },
+    {
+      sno:3,
+      hindi:80
+   }
+]
+
+---------------
+Install mongodb
+
+Window
+> C:\data\db
+
+
+Mac
+sudo mkdir /System/Volumes/Data/data/db
+
+linux
+sudo mkdir /data/db
+
+Window
+C:/data/db
+
+How to run mongodb
+> Open two terminal 
+    1> Mongo server (should alawys running)
+    2> Mongo console ( To test query)
+
+Use cmd and naviagte
+> C:/Program/Mongo/3.4/bin
+> mongod  (mongodb server)
+
+>Use cmd and naviagte
+> C:Program/Mongo/4.2/bin
+> mongod (to start server)
+> mongo (to connect with console)
+
+Mac
+> Open Terminal
+> sudo mongod --dbpath /System/Volumes/Data/data/db
+> Open Terminal
+> mongo
+
+linux
+> Open Terminal
+> sudo mongod --dbpath /data/db
+> Open Terminal
+> mongo---------------
+Install mongodb
+
+Window
+> C:\data\db
+
+
+Mac
+sudo mkdir /System/Volumes/Data/data/db
+
+linux
+sudo mkdir /data/db
+
+Window
+C:/data/db
+
+How to run mongodb
+> Open two terminal 
+    1> Mongo server (should alawys running)
+    2> Mongo console ( To test query)
+
+Use cmd and naviagte
+> C:/Program/Mongo/3.4/bin
+> mongod  (mongodb server)
+
+>Use cmd and naviagte
+> C:Program/Mongo/4.2/bin
+> mongod (to start server)
+> mongo (to connect with console)
+
+Mac
+> Open Terminal
+> sudo mongod --dbpath /System/Volumes/Data/data/db
+> Open Terminal
+> mongo
+
+linux
+> Open Terminal
+> sudo mongod --dbpath /data/db
+> Open Terminal
+> mongo
+
+show dbs
+use nareshit
+show collections
+
+db.zomato.find()
+db.zomato.find({id:"19070793"}).pretty()
+db.zomato.find({aggregate_rating:{$lt:'4.4'},city:'Delhi'})
+
+db.zomato.find({aggregate_rating:{$lt:'4.4'},city:'Delhi'},{name:1,min_price:1})
+
+db.zomato.find({aggregate_rating:{$lt:'4.4'},city:'Delhi'},{name:1,min_price:1,_id:0}).sort({aggregate_rating:1})
+
+
+db.test.insert({"name":"abc"})
+
+db.test.insertMany([{},{},{}])
