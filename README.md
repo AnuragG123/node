@@ -72,3 +72,53 @@ if __name__ == '__main__':
 
     connect_quicksight_datasource_and_secretsmanager()
 
+
+
+import boto3
+
+
+
+quicksight = boto3.client('quicksight')
+
+secretsmanager = boto3.client('secretsmanager')
+
+
+
+# Get the secret value from Secrets Manager
+
+secret_value = secretsmanager.get_secret_value(SecretId='<your-secret-arn>')
+
+
+
+# Create the QuickSight datasource
+
+datasource_response = quicksight.create_data_source(
+
+    Arn='arn:aws:quicksight:<your-region>:<your-account-id>:redshift/my-redshift-datasource',
+
+    Name='My Redshift Datasource',
+
+    Type='redshift',
+
+    DataSourceParameters={
+
+        'Host': secret_value['SecretString']['host'],
+
+        'Port': secret_value['SecretString']['port'],
+
+        'Database': secret_value['SecretString']['database'],
+
+        'Username': secret_value['SecretString']['username'],
+
+        'Password': secret_value['SecretString']['password'],
+
+    }
+
+)
+
+
+
+# Print the datasource ARN
+
+print(datasource_response['Arn'])
+
