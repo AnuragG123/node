@@ -4,81 +4,71 @@ import json
 
 
 
-# AWS service clients
+def connect_quicksight_datasource_and_secretsmanager():
 
-quicksight = boto3.client('quicksight', region_name='your-region')
-
-secretsmanager = boto3.client('secretsmanager', region_name='your-region')
+    """Connects QuickSight datasource and SecretsManager."""
 
 
 
-# Name of the QuickSight data source
+    # Create a SecretsManager client.
 
-data_source_name = 'MyRedshiftDataSource'
-
-
-
-# ARN of the AWS Secrets Manager secret containing Redshift credentials
-
-secret_arn = 'arn:aws:secretsmanager:your-region:your-account-id:secret:your-secret-name'
+    client = boto3.client('secretsmanager')
 
 
 
-# QuickSight data source configuration for Redshift
+    # Get the secret from SecretsManager.
 
-data_source_config = {
-
-    'DataSourceId': data_source_name,
-
-    'Name': data_source_name,
-
-    'Type': 'REDSHIFT',
-
-    'RedshiftParameters': {
-
-        'Host': 'your-redshift-host',
-
-        'Port': 5439,  # Change to your Redshift port if it's different
-
-        'Database': 'your-redshift-database',
-
-        'ClusterId': 'your-redshift-cluster-id',
-
-        'AwsSecretStoreArn': secret_arn,
-
-    }
-
-}
+    secret = client.get_secret_value(SecretId='quicksight-datasource-secret')
 
 
 
-# Create the data source
+    # Parse the secret JSON.
 
-response = quicksight.create_data_source(
+    secret_json = json.loads(secret['SecretString'])
 
-    AwsAccountId='your-account-id',
 
-    DataSourceId=data_source_name,
 
-    Name=data_source_name,
+    # Create a QuickSight client.
 
-    DataSourceParameters=data_source_config,
+    quicksight_client = boto3.client('quicksight')
 
-    Permissions=[
 
-        {
 
-            'Principal': 'arn:aws:quicksight:your-region:your-account-id:namespace/default/your-quick-sight-user',
+    # Connect to the QuickSight datasource.
 
-            'Actions': ['quicksight:DescribeDataSource'],
+    quicksight_client.connect_data_source(
+
+        DataSourceId='quicksight-datasource-id',
+
+        DataSourceCredentials={
+
+            'Username': secret_json['username'],
+
+            'Password': secret_json['password'],
 
         },
 
-    ]
-
-)
+    )
 
 
 
-print(json.dumps(response, indent=4))
+    # Verify that the connection was successful.
+
+    response = quicksight_client.describe_data_source(DataSourceId='quicksight-datasource-id')
+
+    if response['Status'] == 'CONNECTED':
+
+        print('Connection successful!')
+
+    else:
+
+        print('Connection failed!')
+
+
+
+
+
+if __name__ == '__main__':
+
+    connect_quicksight_datasource_and_secretsmanager()
 
