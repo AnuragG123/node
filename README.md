@@ -1,48 +1,115 @@
-Certainly! 
+case 1 :
 
-The code you've provided seems to deal with AWS S3 bucket operations using the boto3 library. When fetching objects or their versions from an S3 bucket, there might be a maximum limit (typically 1000 objects) to the number of results returned by a single request. To handle situations where there are more than this limit, you need to implement pagination.
+Certainly! You can use Terraform to automate the deployment of a Jupyter Notebook instance. You’d generally do this by creating necessary infrastructure like a Virtual Machine, installing the required packages, and setting up the appropriate network configurations. Below is a simplified example of how you might do this using a Terraform script to set up a Jupyter Notebook on an AWS EC2 instance.
 
-Here's a way to implement pagination for deleting all objects in an S3 bucket:
+1. **Prerequisites:**
+   - Install Terraform.
+   - Configure AWS CLI.
 
-1. For deleting objects:
-```python
-def delete_all_objects(bucket, prefix=''):
-    s3_client = boto3.client('s3')
-    paginator = s3_client.get_paginator('list_objects_v2')
-    
-    # Create an iterator for pages of object listings
-    pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
-    
-    for page in pages:
-        if 'Contents' in page:
-            objects_to_delete = [{'Key': obj['Key']} for obj in page['Contents']]
-            s3_client.delete_objects(Bucket=bucket, Delete={'Objects': objects_to_delete})
+2. **Terraform Script (`main.tf`):**
+```hcl
+provider "aws" {
+  region = "us-west-1"
+}
+
+resource "aws_instance" "jupyter_instance" {
+  ami           = "ami-0c55b159cbfafe1f0"
+  instance_type = "t2.micro"
+
+  tags = {
+    Name = "JupyterNotebook"
+  }
+
+  user_data = <<-EOF
+              #!/bin/bash
+              sudo apt-get update
+              sudo apt-get install -y python3-pip
+              pip3 install notebook
+              EOF
+}
+
+output "public_ip" {
+  value = aws_instance.jupyter_instance.public_ip
+}
 ```
 
-2. For deleting object versions (including delete markers):
-```python
-def delete_all_object_versions(bucket, prefix=''):
-    s3_client = boto3.client('s3')
-    paginator = s3_client.get_paginator('list_object_versions')
-    
-    # Create an iterator for pages of object version listings
-    pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
-    
-    for page in pages:
-        objects_to_delete = []
-        
-        if 'Versions' in page:
-            for version in page['Versions']:
-                objects_to_delete.append({'Key': version['Key'], 'VersionId': version['VersionId']})
+3. **Initialize and Apply:**
+   - Run `terraform init` to initialize the configuration.
+   - Run `terraform apply` to create the infrastructure.
 
-        if 'DeleteMarkers' in page:
-            for marker in page['DeleteMarkers']:
-                objects_to_delete.append({'Key': marker['Key'], 'VersionId': marker['VersionId']})
+4. **Access Jupyter Notebook:**
+   - SSH into the created EC2 instance.
+   - Run `jupyter notebook --ip=0.0.0.0 --no-browser` to start the Jupyter Notebook.
+   - Access the Jupyter Notebook using the public IP and the token provided.
 
-        if objects_to_delete:
-            s3_client.delete_objects(Bucket=bucket, Delete={'Objects': objects_to_delete})
+Note:
+- Ensure that you have the necessary permissions and the security group rules allow the required traffic (e.g., SSH, HTTP).
+- You might need to modify the `ami`, `instance_type`, and other configurations based on your needs.
+- The given script installs Jupyter Notebook in a basic way, and you might want to further configure it based on your needs (e.g., setting up passwords, using virtual environments).
+
+
+
+case 2 :: by using file provisioners 
+
+Certainly! You can use a file provisioner to transfer a bash script to the instance and a remote-exec provisioner to execute it. Below is an example of how you might do this:
+
+1. **Create a Bash Script (`setup_jupyter.sh`):**
+```bash
+#!/bin/bash
+sudo apt-get update
+sudo apt-get install -y python3-pip
+pip3 install notebook
 ```
 
-Replace your original deletion methods with the ones provided above to ensure all objects and their versions (if any) are deleted from the S3 bucket, even if they number more than 1000.
+2. **Terraform Script (`main.tf`):**
+```hcl
+provider "aws" {
+  region = "us-west-1"
+}
 
-Remember to handle exceptions appropriately and be extremely careful when performing delete operations, as this will permanently remove objects and their versions from the bucket.
+resource "aws_instance" "jupyter_instance" {
+  ami           = "ami-0c55b159cbfafe1f0"
+  instance_type = "t2.micro"
+
+  tags = {
+    Name = "JupyterNotebook"
+  }
+
+  provisioner "file" {
+    source      = "setup_jupyter.sh"
+    destination = "/tmp/setup_jupyter.sh"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "chmod +x /tmp/setup_jupyter.sh",
+      "/tmp/setup_jupyter.sh",
+    ]
+  }
+
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    private_key = file("~/.ssh/id_rsa")
+  }
+}
+
+output "public_ip" {
+  value = aws_instance.jupyter_instance.public_ip
+}
+```
+
+3. **Initialize and Apply:**
+   - Run `terraform init` to initialize the configuration.
+   - Run `terraform apply` to create the infrastructure.
+
+4. **Access Jupyter Notebook:**
+   - SSH into the created EC2 instance.
+   - Run `jupyter notebook --ip=0.0.0.0 --no-browser` to start the Jupyter Notebook.
+   - Access the Jupyter Notebook using the public IP and the token provided.
+
+Note:
+- Ensure the bash script (`setup_jupyter.sh`) is executable.
+- Update the connection block with the appropriate SSH username and private key path.
+- Adjust security group rules to allow necessary traffic (SSH, HTTP).
+- Depending on the AMI used, you might need to adjust the username in the connection block or other parts of the script.
