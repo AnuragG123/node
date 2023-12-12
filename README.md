@@ -1,4 +1,4 @@
-To create a simple API with Python and Terraform for deleting data in an S3 bucket named "Ganesh," you can use AWS Lambda and API Gateway. Below is a simplified example:
+To create an API with Python and Terraform for deleting data in an S3 bucket named "Ganesh," and sending email notifications to both "anu@gmail.com" and "godi@gmail.com," you can use AWS Lambda, API Gateway, and SES (Simple Email Service). Below is a simplified example:
 
 ### 1. Python Script (`delete_old_data.py`):
 
@@ -7,7 +7,6 @@ import boto3
 from datetime import datetime, timedelta
 import os
 import json
-import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -17,14 +16,14 @@ def lambda_handler(event, context):
     prefix = 'converted/'
 
     # Delete old data
-    delete_old_data(bucket_name, prefix)
+    deleted_objects = delete_old_data(bucket_name, prefix)
 
     # Send email notification
     subject = 'S3 Data Deletion Notification'
-    body = 'Old data with prefix "{}" deleted from S3 bucket "{}".'.format(prefix, bucket_name)
-    to_email = 'anu@gmail.com'
+    body = f'Old data with prefix "{prefix}" deleted from S3 bucket "{bucket_name}".\nDeleted Objects: {deleted_objects}'
+    to_emails = ['anu@gmail.com', 'godi@gmail.com']
 
-    send_email(subject, body, to_email)
+    send_email(subject, body, to_emails)
 
     return {
         'statusCode': 200,
@@ -41,30 +40,32 @@ def delete_old_data(bucket_name, prefix):
     objects = s3.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
 
     # Delete objects older than the threshold date
+    deleted_objects = []
     for obj in objects.get('Contents', []):
         last_modified = obj['LastModified'].replace(tzinfo=None)
         if last_modified < threshold_date:
             s3.delete_object(Bucket=bucket_name, Key=obj['Key'])
+            deleted_objects.append(obj['Key'])
 
-def send_email(subject, body, to_email):
-    # Replace with your email credentials
-    from_email = 'your_email@gmail.com'
-    password = 'your_email_password'
+    return deleted_objects
+
+def send_email(subject, body, to_emails):
+    # Replace with your SES configuration
+    ses = boto3.client('ses', region_name='your_aws_region')
 
     # Setup the MIME
     message = MIMEMultipart()
-    message['From'] = from_email
-    message['To'] = to_email
     message['Subject'] = subject
-
-    # Attach the body to the email
     message.attach(MIMEText(body, 'plain'))
 
-    # Connect to the SMTP server and send the email
-    with smtplib.SMTP('smtp.gmail.com', 587) as server:
-        server.starttls()
-        server.login(from_email, password)
-        server.sendmail(from_email, to_email, message.as_string())
+    # Send email to each recipient
+    for to_email in to_emails:
+        message['To'] = to_email
+        ses.send_raw_email(
+            Source='your_ses_verified_email@example.com',
+            Destinations=[to_email],
+            RawMessage={'Data': message.as_string()}
+        )
 ```
 
 ### 2. Terraform Script (`main.tf`):
@@ -144,6 +145,11 @@ resource "aws_iam_role_policy_attachment" "lambda_policy_attachment" {
   role       = aws_iam_role.lambda_execution.name
 }
 
+# SES verified email
+resource "aws_ses_domain_identity" "my_identity" {
+  domain = "example.com"  # Replace with your domain
+}
+
 # API Gateway to trigger Lambda function
 resource "aws_api_gateway_rest_api" "my_api" {
   name        = "my_api"
@@ -189,6 +195,7 @@ output "api_url" {
 1. Run `terraform init` to initialize your Terraform configuration.
 2. Run `terraform apply` to deploy the infrastructure.
 3. Note the API endpoint URL (`api_url`) provided in the Terraform output.
-4. You can send a POST request to the API endpoint to trigger the Lambda function, which will delete old data and send an email notification.
+4. Ensure your SES domain is properly verified, and replace the SES configurations accordingly.
+5. You can send a POST request to the API endpoint to trigger the Lambda function, which will delete old data and send email notifications to "anu@gmail.com" and "godi@gmail.com."
 
-This is a basic example, and you may need to adapt it based on your specific use case, security considerations, and best practices. Ensure to handle sensitive information securely and follow AWS security recommendations.
+Remember, this is a basic example, and you may need to adapt it based on your specific use case, security considerations, and best practices. Ensure to handle sensitive information securely and follow AWS security recommendations.
