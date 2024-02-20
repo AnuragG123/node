@@ -1,46 +1,28 @@
-Here's a Terraform code snippet to create a cross-account IAM role named `sf-decop-test-17227-data-engineer` with the specified policy allowing `S3:GetObject` permission to the bucket named `sf-datalebd-bucket`:
+import boto3
 
-```terraform
-provider "aws" {
-  region = "your_region"
-  assume_role {
-    role_arn = "arn:aws:iam::3563937393:role/role_name"
-  }
-}
+def lambda_handler(event, context):
+    database_name = "your_database_name"
+    result = delete_glue_database(database_name)
+    return {
+        'statusCode': 200 if result else 500,
+        'body': "Database deleted successfully" if result else "Failed to delete database"
+    }
 
-resource "aws_iam_role" "cross_account_role" {
-  name               = "sf-decop-test-17227-data-engineer"
-  assume_role_policy = jsonencode({
-    Version   = "2012-10-17",
-    Statement = [{
-      Effect    = "Allow",
-      Principal = {
-        AWS = "arn:aws:iam::3563937393:root"
-      },
-      Action    = "sts:AssumeRole",
-      Condition = {}
-    }]
-  })
-}
-
-resource "aws_iam_policy" "s3_policy" {
-  name        = "sf-foa-dstabkend-assets"
-  description = "Policy granting S3 GetObject permission"
-  policy      = jsonencode({
-    Version   = "2012-10-17",
-    Statement = [{
-      Effect   = "Allow",
-      Action   = "s3:GetObject",
-      Resource = "arn:aws:s3:::sf-datalebd-bucket/*"
-    }]
-  })
-}
-
-resource "aws_iam_policy_attachment" "s3_policy_attachment" {
-  name       = "sf-foa-dstabkend-assets-attachment"
-  policy_arn = aws_iam_policy.s3_policy.arn
-  roles      = [aws_iam_role.cross_account_role.name]
-}
-```
-
-Replace `"your_region"` with the AWS region you're working in. Make sure to adjust the `role_arn` in the provider block to match the actual ARN of the IAM role in the other account that you want to assume the role from.
+def delete_glue_database(database_name):
+    try:
+        # Initialize Glue client
+        glue_client = boto3.client('glue')
+        
+        # Delete the database
+        response = glue_client.delete_database(Name=database_name)
+        
+        # Check if the operation was successful
+        if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+            print(f"Database '{database_name}' deleted successfully.")
+            return True
+        else:
+            print(f"Failed to delete database '{database_name}'.")
+            return False
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return False
