@@ -1,3 +1,10 @@
+The error you're encountering is due to the Lambda function expecting a handler named `lambda_handler` in the module `lambda_function`, but your code doesn't have it.
+
+To fix this, you can either rename your function to `lambda_handler` or adjust the Lambda function configuration to point to the correct handler.
+
+Here's how you can modify your code to use the `lambda_handler`:
+
+```python
 import boto3
 
 def lambda_handler(event, context):
@@ -26,3 +33,6 @@ def delete_glue_database(database_name):
     except Exception as e:
         print(f"An error occurred: {e}")
         return False
+```
+
+Ensure that your Lambda function's runtime environment is set to Python and that you have the necessary permissions to perform the `glue:DeleteDatabase` action as indicated in the AccessDeniedException error message.
