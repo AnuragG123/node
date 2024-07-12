@@ -1,80 +1,86 @@
-To send an email notification for every deletion of data to the specified email addresses, you can modify the script to include the email sending functionality. Here's the updated script:
+The issue is that the `list_objects_v2` API call with the `Delimiter` parameter may not return the expected `CommonPrefixes` if the objects are not structured as anticipated. Additionally, specifying the exact `Prefix` for a single folder (`converted/loss/on533/region_number=01/YR_MO=201501/`) does not allow for iterating over multiple potential folders. Let's address these issues by adjusting the code to list all objects under the `FOLDER_PREFIX` and identify the folders to delete based on their age.
+
+Here's the updated Lambda function:
 
 ```python
 import boto3
-from datetime import datetime, timedelta
-from botocore.exceptions import ClientError
+from datetime import datetime
+import re
+import logging
 
-def delete_old_folders(bucket_name, prefix, older_than_years=8):
-    s3 = boto3.client('s3')
-    deleted_objects = []
+# Initialize boto3 clients
+s3_client = boto3.client('s3')
 
-    # Calculate cutoff date
-    cutoff_date = datetime.now() - timedelta(days=older_than_years*365)
+# Define constants
+BUCKET_NAME = 'anuragwarangal'
+FOLDER_PREFIX = 'converted/loss/on533/region_number=01/'
 
-    # List objects in the bucket with the given prefix
-    response = s3.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+# Set up logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
-    # Iterate through objects and delete those older than cutoff date
+def get_folders_to_delete():
+    logger.info(f"Listing objects in bucket {BUCKET_NAME} with prefix {FOLDER_PREFIX}")
+    response = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix=FOLDER_PREFIX)
+    folders = set()
     if 'Contents' in response:
         for obj in response['Contents']:
             key = obj['Key']
-            folder_year = key.split('=')[1][:4]  # Extract year from folder name
-            folder_date = datetime.strptime(folder_year, "%Y")
-            
-            if folder_date < cutoff_date:
-                print(f"Deleting object: {key}")
-                s3.delete_object(Bucket=bucket_name, Key=key)
-                deleted_objects.append(key)
-    
-    return deleted_objects
+            match = re.search(r'YR_MO=(\d{6})/', key)
+            if match:
+                year_month = match.group(1)
+                year = int(year_month[:4])
+                month = int(year_month[4:])
+                folder_date = datetime(year, month, 1)
+                if (datetime.now() - folder_date).days > 8 * 365:  # Older than 8 years
+                    folder_prefix = key.split('YR_MO=')[0] + f'YR_MO={year_month}/'
+                    folders.add(folder_prefix)
+    return list(folders)
 
-def send_email_notification(deleted_objects):
-    SENDER = "your_ses_verified_email@example.com"
-    RECIPIENTS = ["anurag@gmail.com", "gou@gmail.com"]
-    SUBJECT = "Data Deletion Notification"
-    CHARSET = "UTF-8"
+def delete_folders(folders):
+    for folder in folders:
+        logger.info(f"Deleting contents of folder: {folder}")
+        response = s3_client.list_objects_v2(Bucket=BUCKET_NAME, Prefix=folder)
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                logger.info(f"Deleting object: {obj['Key']}")
+                s3_client.delete_object(Bucket=BUCKET_NAME, Key=obj['Key'])
+        logger.info(f"Deleting folder: {folder}")
+        s3_client.delete_object(Bucket=BUCKET_NAME, Key=folder)
 
-    # Create email body
-    email_body = f"The following objects have been deleted:\n\n"
-    for obj in deleted_objects:
-        email_body += f"- {obj}\n"
-
-    # Create the email message
-    email_message = {
-        'Subject': {'Data': SUBJECT, 'Charset': CHARSET},
-        'Body': {'Text': {'Data': email_body, 'Charset': CHARSET}}
+def lambda_handler(event, context):
+    logger.info("Lambda function started")
+    folders_to_delete = get_folders_to_delete()
+    if folders_to_delete:
+        delete_folders(folders_to_delete)
+        logger.info(f"Deleted folders: {folders_to_delete}")
+    else:
+        logger.info("No folders to delete")
+    return {
+        'statusCode': 200,
+        'body': 'Lambda function executed successfully.'
     }
-
-    # Create a new SES client
-    ses_client = boto3.client('ses')
-
-    # Try to send the email
-    try:
-        # Provide the contents of the email
-        response = ses_client.send_email(
-            Destination={'ToAddresses': RECIPIENTS},
-            Message=email_message,
-            Source=SENDER
-        )
-    # Display an error if something goes wrong
-    except ClientError as e:
-        print(f"Error sending email: {e.response['Error']['Message']}")
-    else:
-        print("Email sent successfully")
-
-# Example usage
-if __name__ == "__main__":
-    bucket_name = 'your_bucket_name'
-    prefix = 'converted/'
-    deleted_objects = delete_old_folders(bucket_name, prefix)
-    if deleted_objects:
-        print("Deleted objects:")
-        for obj in deleted_objects:
-            print(obj)
-        send_email_notification(deleted_objects)
-    else:
-        print("No objects deleted.")
 ```
 
-Ensure to replace `'your_bucket_name'` with your actual S3 bucket name, and set `'your_ses_verified_email@example.com'` to your SES verified email address. This script will send an email notification listing the deleted objects to the specified email addresses every time an object is deleted.
+### Explanation:
+
+1. **Listing Objects:**
+   - The `list_objects_v2` call lists all objects under the `FOLDER_PREFIX`.
+   - We search for `YR_MO` folder names using a regex pattern in the object keys.
+
+2. **Identifying Old Folders:**
+   - The regex extracts the `YR_MO` value from the key.
+   - It then calculates the date and checks if it is older than 8 years.
+   - If so, it adds the folder prefix to the set of folders to delete.
+
+3. **Deleting Folders:**
+   - The function iterates over the identified folders and deletes their contents and the folder itself.
+
+### Steps to Follow:
+
+1. **Update the Lambda function code** with the above updated code.
+2. **Deploy the updated Lambda function**.
+3. **Trigger the Lambda function** again using the API Gateway or manually in the Lambda console.
+4. **Check the CloudWatch logs** to verify the folders are being identified and deleted.
+
+This should address the issue of identifying and deleting `YR_MO` folders older than 8 years.
