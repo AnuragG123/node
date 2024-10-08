@@ -1,0 +1,99 @@
+
+import os
+import boto3
+import json
+import logging
+from botocore.exceptions import ClientError
+
+# Logging Configuration
+log = logging.getLogger()
+log.setLevel(logging.INFO)
+
+env = os.environ['env']  # Fetch the env_type from Lambda environment variable
+s3_client = boto3.client('s3')  # S3 client to perform S3 related actions
+
+
+# Generic method to copy a single file between S3 locations
+def copy_file(src_bucket, target_bucket, file_prefix, target_file_prefix):
+    copy_source_object = {'Bucket': src_bucket, 'Key': file_prefix}
+    response = s3_client.copy_object(ACL='bucket-owner-full-control',
+                                     CopySource=copy_source_object,
+                                     Bucket=target_bucket,
+                                     Key=target_file_prefix)
+
+
+# Generic method to copy a single file between S3 locations by its version ID
+def copy_version_file(src_bucket, target_bucket, file_prefix, target_file_prefix, version_id):
+    copy_source_object = {'Bucket': src_bucket, 'Key': file_prefix, 'VersionId': version_id}
+    response = s3_client.copy_object(ACL='bucket-owner-full-control',
+                                     CopySource=copy_source_object,
+                                     Bucket=target_bucket,
+                                     Key=target_file_prefix)
+
+
+# Method to copy files recursively within a nested prefix structure
+def copy_list_of_files(src_bucket, target_bucket, prefix, target_file_prefix):
+    paginator = s3_client.get_paginator('list_objects_v2')
+    page_iterator = paginator.paginate(Bucket=src_bucket, Prefix=prefix, Delimiter='/')
+    for page in page_iterator:
+        if 'Contents' in page:
+            for content in page['Contents']:
+                # Construct target key with target prefix and relative path
+                target_key = target_file_prefix + "/" + content['Key'].replace(prefix + "/", "", 1)
+                if content['Key'].endswith('/'):  # Handle nested directories
+                    # Recursively call copy_list_of_files for nested prefixes
+                    copy_list_of_files(src_bucket, target_bucket, content['Key'], target_key)
+                else:
+                    copy_file(src_bucket, target_bucket, content['Key'], target_key)
+
+
+# Generic method to return a message or response to API Gateway
+def lambda_return_response(status_code, message):
+    response = {
+        'statusCode': status_code,
+        'headers': {'Content-Type': 'application/json'},
+        'body': message,
+        'isBase64Encoded': True
+    }
+    return response
+
+
+def lambda_handler(event, context):
+    try:
+        userarn = event['requestContext']['identity']['userArn']
+        user_role_name = userarn.split('/')[1]
+
+        if user_role_name == "sf-finmod-test-developer-role" or user_role_name == "sf-finmod-test-devops-role":
+            body = event['body']
+            data = json.loads(body)
+
+            src_bucket = data['bucket_name']
+            trg_bucket = data['target_bucket']
+            file_prefix = data['file_prefix']  # Can be a file or a prefix for nested directories
+            target_file_prefix = data['target_file_prefix']
+
+            if 'is_folder' in str(data) and data['is_folder']:
+                copy_list_of_files(src_bucket, trg_bucket, file_prefix, target_file_prefix)
+            elif 'version_id' in str(data):
+                copy_version_file(src_bucket, trg_bucket, file_prefix, target_file_prefix, data['version_id'])
+            else:
+                copy_file(src_bucket, trg_bucket, file_prefix, target_file_prefix)
+
+            return lambda_return_response(200, "File/Object(s) copied successfully")
+        else:
+            return lambda_return_response(400, "Not authorized to perform this action")
+
+    except ClientError as err:
+        log.info("Exception occurred in Code")
+        log.info(err)
+
+        if 'NoSuchKey' in str(err.response):
+            return lambda_return_response(202, "Please check given file prefix. No such file found in the given bucket")
+        elif 'NoSuchBucket' in str(err.response):
+            return lambda_return_response(202, "Please check given source or target bucket. No such bucket available")
+        elif 'AccessDenied' in str(err.response):
+            return lambda_return_response(400, "Not authorized to perform this action")
+        else:
+            return lambda_return_response(400, "Exception in main logic please check logs")
+    except Exception as e:
+        return lambda_return_response(400, "Exception in input parameter or input value is empty")
