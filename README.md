@@ -1,59 +1,99 @@
-Here's an AWS Lambda function in Python (using `boto3`) that creates a new copy of an Amazon Machine Image (AMI) from a given AMI. You need to provide the source AMI ID and specify other necessary parameters like the name and description of the copied AMI.
 
-### Prerequisites:
-- Ensure that the Lambda function has the necessary IAM role permissions (`ec2:CopyImage`, `ec2:DescribeImages`).
-
-### Lambda Function Code:
-
-```python
-import json
+import os
 import boto3
-import time
+import json
+import logging
+from botocore.exceptions import ClientError
 
-ec2 = boto3.client('ec2')
+# Logging Configuration
+log = logging.getLogger()
+log.setLevel(logging.INFO)
+
+env = os.environ['env']  # Fetch the env_type from Lambda environment variable
+s3_client = boto3.client('s3')  # S3 client to perform S3 related actions
+
+
+# Generic method to copy a single file between S3 locations
+def copy_file(src_bucket, target_bucket, file_prefix, target_file_prefix):
+    copy_source_object = {'Bucket': src_bucket, 'Key': file_prefix}
+    response = s3_client.copy_object(ACL='bucket-owner-full-control',
+                                     CopySource=copy_source_object,
+                                     Bucket=target_bucket,
+                                     Key=target_file_prefix)
+
+
+# Generic method to copy a single file between S3 locations by its version ID
+def copy_version_file(src_bucket, target_bucket, file_prefix, target_file_prefix, version_id):
+    copy_source_object = {'Bucket': src_bucket, 'Key': file_prefix, 'VersionId': version_id}
+    response = s3_client.copy_object(ACL='bucket-owner-full-control',
+                                     CopySource=copy_source_object,
+                                     Bucket=target_bucket,
+                                     Key=target_file_prefix)
+
+
+# Method to copy files recursively within a nested prefix structure
+def copy_list_of_files(src_bucket, target_bucket, prefix, target_file_prefix):
+    paginator = s3_client.get_paginator('list_objects_v2')
+    page_iterator = paginator.paginate(Bucket=src_bucket, Prefix=prefix, Delimiter='/')
+    for page in page_iterator:
+        if 'Contents' in page:
+            for content in page['Contents']:
+                # Construct target key with target prefix and relative path
+                target_key = target_file_prefix + "/" + content['Key'].replace(prefix + "/", "", 1)
+                if content['Key'].endswith('/'):  # Handle nested directories
+                    # Recursively call copy_list_of_files for nested prefixes
+                    copy_list_of_files(src_bucket, target_bucket, content['Key'], target_key)
+                else:
+                    copy_file(src_bucket, target_bucket, content['Key'], target_key)
+
+
+# Generic method to return a message or response to API Gateway
+def lambda_return_response(status_code, message):
+    response = {
+        'statusCode': status_code,
+        'headers': {'Content-Type': 'application/json'},
+        'body': message,
+        'isBase64Encoded': True
+    }
+    return response
+
 
 def lambda_handler(event, context):
-    # Get the AMI ID from the event or set it manually
-    source_ami_id = event.get('source_ami_id', 'ami-xxxxxxxxxxxxxx')  # Replace with the source AMI ID
-    
-    # Name and description for the new copied AMI
-    new_ami_name = event.get('new_ami_name', f'copy-of-{source_ami_id}-{int(time.time())}')
-    new_ami_description = event.get('new_ami_description', f'Copy of AMI {source_ami_id}')
-    
     try:
-        # Copy the AMI
-        response = ec2.copy_image(
-            SourceRegion='us-west-2',  # Change this to the correct source region
-            SourceImageId=source_ami_id,
-            Name=new_ami_name,
-            Description=new_ami_description
-        )
-        
-        # Return success message with new AMI ID
-        return {
-            'statusCode': 200,
-            'body': json.dumps(f'New AMI created with ID: {response["ImageId"]}')
-        }
-    
+        userarn = event['requestContext']['identity']['userArn']
+        user_role_name = userarn.split('/')[1]
+
+        if user_role_name == "sf-finmod-test-developer-role" or user_role_name == "sf-finmod-test-devops-role":
+            body = event['body']
+            data = json.loads(body)
+
+            src_bucket = data['bucket_name']
+            trg_bucket = data['target_bucket']
+            file_prefix = data['file_prefix']  # Can be a file or a prefix for nested directories
+            target_file_prefix = data['target_file_prefix']
+
+            if 'is_folder' in str(data) and data['is_folder']:
+                copy_list_of_files(src_bucket, trg_bucket, file_prefix, target_file_prefix)
+            elif 'version_id' in str(data):
+                copy_version_file(src_bucket, trg_bucket, file_prefix, target_file_prefix, data['version_id'])
+            else:
+                copy_file(src_bucket, trg_bucket, file_prefix, target_file_prefix)
+
+            return lambda_return_response(200, "File/Object(s) copied successfully")
+        else:
+            return lambda_return_response(400, "Not authorized to perform this action")
+
+    except ClientError as err:
+        log.info("Exception occurred in Code")
+        log.info(err)
+
+        if 'NoSuchKey' in str(err.response):
+            return lambda_return_response(202, "Please check given file prefix. No such file found in the given bucket")
+        elif 'NoSuchBucket' in str(err.response):
+            return lambda_return_response(202, "Please check given source or target bucket. No such bucket available")
+        elif 'AccessDenied' in str(err.response):
+            return lambda_return_response(400, "Not authorized to perform this action")
+        else:
+            return lambda_return_response(400, "Exception in main logic please check logs")
     except Exception as e:
-        return {
-            'statusCode': 500,
-            'body': json.dumps(f'Error copying AMI: {str(e)}')
-        }
-```
-
-### Steps:
-1. **Deploy the Lambda**: Copy the above code into your AWS Lambda function.
-2. **Trigger**: You can trigger this function using an AWS API Gateway, CloudWatch event, or invoke it manually by providing the `source_ami_id` in the event.
-3. **Source Region**: Modify the `SourceRegion` parameter according to where the original AMI is located.
-
-### Event Example:
-```json
-{
-    "source_ami_id": "ami-xxxxxxxxxxxxxx",
-    "new_ami_name": "MyCopiedAMI",
-    "new_ami_description": "This is a copy of my AMI"
-}
-```
-
-This function will create a copy of the specified AMI in the same region. Let me know if you need any further adjustments!
+        return lambda_return_response(400, "Exception in input parameter or input value is empty")
