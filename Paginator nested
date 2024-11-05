@@ -42,26 +42,6 @@ def copy_version_file(src_bucket, target_bucket, file_prefix, target_file_prefix
     response = s3_client.copy_object(ACL='bucket-owner-full-control', CopySource=copy_source_object, Bucket=target_bucket, Key=target_file_prefix)
 
 
-def copy_list_of_files(src_bucket, target_bucket, prefix, target_file_prefix):
-    """
-    Generic method to copy a list of files between S3 locations, using pagination to handle large datasets.
-
-    Input: src file details and target details
-    """
-
-    paginator = s3_client.get_paginator('list_objects_v2')
-    page_iterator = paginator.paginate(Bucket=src_bucket, Prefix=prefix)
-
-    for page in page_iterator:
-        if 'Contents' in page:
-            for content in page['Contents']:
-                # Construct target key with target prefix and relative path
-                src_obj = content.get('Key', '')
-                target_obj = src_obj.replace(prefix, target_file_prefix)
-
-                copy_file(src_bucket, target_bucket, src_obj, target_obj)
-
-
 def lambda_return_response(status_code, message):
     """
     Generic method to return message or response back to the API Gateway
@@ -90,11 +70,7 @@ def lambda_handler(event, context):
             file_prefix = data['file_prefix']
             target_file_prefix = data['target_file_prefix']
 
-            if ('is_folder' in str(data) and data['is_folder']):
-                copy_list_of_files(src_bucket, trg_bucket, file_prefix, target_file_prefix)
-                return lambda_return_response(200, "File/Object copied successfully")
-
-            elif 'version_id' in str(data):
+            if 'version_id' in str(data):
                 copy_version_file(src_bucket, trg_bucket, file_prefix, target_file_prefix, data['version_id'])
                 return lambda_return_response(200, "File/Object copied successfully")
 
